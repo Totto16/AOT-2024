@@ -1,0 +1,24 @@
+{
+  "name": "aot-2024",
+  "version": "1.0.0",
+  "description": "AOT-2024 solutions",
+  "main": "build/index.js",
+  "scripts": {
+    "build": "tsc"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Totto16/AOT-2024.git"
+  },
+  "author": "Totto16",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/Totto16/AOT-2024/issues"
+  },
+  "homepage": "https://github.com/Totto16/AOT-2024#readme",
+  "dependencies": {
+    "type-testing": "^0.2.0",
+    "typescript": "^5.7.2"
+  },
+  "packageManager": "pnpm@9.14.4"
+}
