@@ -1,1 +1,1 @@
-type Demand = number;
+type Demand1 = number;
