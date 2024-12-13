@@ -1,7 +1,5 @@
-type Inv<T> = (value: T) => T // Invariant
-
-type InvType<T> = T extends Inv<infer S> ? S : never // Get Type of Invariant
-
-interface Demand<T, S extends Inv<T> = Inv<T>> {
-	demand: InvType<S>
+// using Variance Annotation, to say this is an Invariant
+// see: https://www.typescriptlang.org/docs/handbook/2/generics.html#variance-annotations
+interface Demand<in out T> {
+	demand: T
 }
