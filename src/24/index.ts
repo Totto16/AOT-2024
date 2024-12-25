@@ -25,7 +25,8 @@ type IsParser<T> = T extends Parser ? true : false;
 // parser metadata
 type Choice = LazyParserMetadata<"choice">;
 
-type EOF = LazyParserMetadata<"eof">;
+type EOFKw = "eof";
+type EOF = LazyOperation<EOFKw, "">;
 
 type JustKw = "just";
 type Just = LazyParserMetadata<JustKw>;
@@ -217,6 +218,12 @@ type PairApplImpl<Data, Arg> = SeqApplImpl<Data, Arg> extends ParserSuccessResul
 			: ParserErrorResult<"Pair didn't match, error message from Seq didn't match, implementation error">
 		: ParserErrorResult<"Pair didn't match, not a valid ParserResult, implementation error">;
 
+type EOFApplImpl<Data, Arg> = Data extends ""
+	? Arg extends ""
+		? ParserSuccessResult<"", "">
+		: ParserErrorResult<"EOF didn't match">
+	: ParserErrorResult<"EOF didn't match, not a valid argument, implementation error">;
+
 type LazyParserAppl<Op, Data, Arg> = Op extends JustKw
 	? JustApplImpl<Data, Arg>
 	: Op extends NoneOfKw
@@ -229,12 +236,14 @@ type LazyParserAppl<Op, Data, Arg> = Op extends JustKw
 					? RightApplImpl<Data, Arg>
 					: Op extends PairKw
 						? PairApplImpl<Data, Arg>
-						: {
-								todo: 2;
-								op: Op;
-								data: Data;
-								arg: Arg;
-							};
+						: Op extends EOFKw
+							? EOFApplImpl<Data, Arg>
+							: {
+									todo: 2;
+									op: Op;
+									data: Data;
+									arg: Arg;
+								};
 
 type Parse<Operation, Argument> = Operation extends LazyParserMetadata<infer T extends string>
 	? LazyParser<T, Argument>
@@ -711,3 +720,10 @@ type pair_parse_check_4 = Expect<
 		}>
 	>
 >;
+
+// eof tests
+
+type eof_is_parser = Expect<Equal<IsParser<EOF>, true>>;
+
+type eof_parse_check_0 = Expect<Equal<Parse<EOF, "">, ParserSuccessResult<"", "">>>;
+type eof_parse_check_1 = Expect<Equal<Parse<EOF, "1">, ParserErrorResult<"EOF didn't match">>>;
