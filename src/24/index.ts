@@ -39,6 +39,9 @@ type Right = LazyParserMetadata<RightKw>;
 type SeqKw = "seq";
 type Seq = LazyParserMetadata<SeqKw>;
 
+type PairKw = "pair";
+type Pair = LazyParserMetadata<PairKw>;
+
 type Many0 = LazyParserMetadata<"many0">;
 
 type Many1 = LazyParserMetadata<"many1">;
@@ -53,8 +56,6 @@ type MaybeResult = LazyParserMetadata<"mayberesult">;
 
 type NoneOf = LazyParserMetadata<"noneof">;
 
-type Pair = LazyParserMetadata<"pair">;
-
 type SepBy0 = LazyParserMetadata<"sepby0">;
 
 // implementations
@@ -65,7 +66,7 @@ type IsValidJustArg<T> = T extends string
 		: "argument length is not 1"
 	: "argument is not a string";
 
-type IsValidRLSArg<T> = T extends [infer A, infer B]
+type IsValidTupleArg<T> = T extends [infer A, infer B]
 	? A extends Parser
 		? B extends Parser
 			? true
@@ -82,30 +83,38 @@ type LazyParser<T extends string, Argument> = T extends JustKw
 				message: IsValidJustArg<Argument>;
 			}
 	: T extends RightKw
-		? IsValidRLSArg<Argument> extends true
+		? IsValidTupleArg<Argument> extends true
 			? LazyOperation<T, Argument>
 			: {
 					error: "invalid argument for Right";
 					argument: Argument;
-					message: IsValidRLSArg<Argument>;
+					message: IsValidTupleArg<Argument>;
 				}
 		: T extends LeftKw
-			? IsValidRLSArg<Argument> extends true
+			? IsValidTupleArg<Argument> extends true
 				? LazyOperation<T, Argument>
 				: {
 						error: "invalid argument for Left";
 						argument: Argument;
-						message: IsValidRLSArg<Argument>;
+						message: IsValidTupleArg<Argument>;
 					}
 			: T extends SeqKw
-				? IsValidRLSArg<Argument> extends true
+				? IsValidTupleArg<Argument> extends true
 					? LazyOperation<T, Argument>
 					: {
 							error: "invalid argument for Seq";
 							argument: Argument;
-							message: IsValidRLSArg<Argument>;
+							message: IsValidTupleArg<Argument>;
 						}
-				: { todo: 0; data: T; arg: Argument };
+				: T extends PairKw
+					? IsValidTupleArg<Argument> extends true
+						? LazyOperation<T, Argument>
+						: {
+								error: "invalid argument for Pair";
+								argument: Argument;
+								message: IsValidTupleArg<Argument>;
+							}
+					: { todo: 0; data: T; arg: Argument };
 
 type JustApplImpl<Data, Arg> = Arg extends string
 	? Arg extends `${infer FirstChar}${infer Rest}`
@@ -124,11 +133,13 @@ type SeqApplImpl<Data, Arg> = Data extends [
 			? ParserSuccessResult<[Data1, Data2], Rest2>
 			: ParserErrorResult<{
 					message: "Seq didn't match, second parser didn't match";
-					result: Parse<Parser2, Rest1>;
+					result: [Parse<Parser1, Arg>, Parse<Parser2, Rest1>];
+					index: 2;
 				}>
 		: ParserErrorResult<{
 				message: "Seq didn't match, first parser didn't match";
 				result: Parse<Parser1, Arg>;
+				index: 1;
 			}>
 	: ParserErrorResult<"Seq didn't match, Arguments didn't match, implementation error">;
 
@@ -138,8 +149,18 @@ type LeftApplImpl<Data, Arg> = SeqApplImpl<Data, Arg> extends ParserSuccessResul
 >
 	? Data extends [infer Data1, infer Data2]
 		? ParserSuccessResult<Data1, Rest>
-		: ParserErrorResult<"Left didn't match, Return Arguments from Seq didn't match, implementation error">
-	: SeqApplImpl<Data, Arg>;
+		: ParserErrorResult<"Left didn't match, return arguments from Seq didn't match, implementation error">
+	: SeqApplImpl<Data, Arg> extends ParserErrorResult<infer Add>
+		? Add extends {
+				message: infer Mes extends string;
+				result: infer Res;
+				index: infer Idx;
+			}
+			? Mes extends `Seq${infer RestMes}`
+				? ParserErrorResult<{ message: `Left${RestMes}`; result: Res; index: Idx }>
+				: ParserErrorResult<Add>
+			: ParserErrorResult<"Left didn't match, error message from Seq didn't match, implementation error">
+		: ParserErrorResult<"Left didn't match, not a valid ParserResult, implementation error">;
 
 type RightApplImpl<Data, Arg> = SeqApplImpl<Data, Arg> extends ParserSuccessResult<
 	infer Data,
@@ -147,8 +168,37 @@ type RightApplImpl<Data, Arg> = SeqApplImpl<Data, Arg> extends ParserSuccessResu
 >
 	? Data extends [infer Data1, infer Data2]
 		? ParserSuccessResult<Data2, Rest>
-		: ParserErrorResult<"Right didn't match, Return Arguments from Seq didn't match, implementation error">
-	: SeqApplImpl<Data, Arg>;
+		: ParserErrorResult<"Right didn't match, return arguments from Seq didn't match, implementation error">
+	: SeqApplImpl<Data, Arg> extends ParserErrorResult<infer Add>
+		? Add extends {
+				message: infer Mes extends string;
+				result: infer Res;
+				index: infer Idx;
+			}
+			? Mes extends `Seq${infer RestMes}`
+				? ParserErrorResult<{ message: `Right${RestMes}`; result: Res; index: Idx }>
+				: ParserErrorResult<Add>
+			: ParserErrorResult<"Right didn't match, error message from Seq didn't match, implementation error">
+		: ParserErrorResult<"Right didn't match, not a valid ParserResult, implementation error">;
+
+type PairApplImpl<Data, Arg> = SeqApplImpl<Data, Arg> extends ParserSuccessResult<
+	infer Data,
+	infer Rest
+>
+	? Data extends [infer Data1 extends string, infer Data2 extends string]
+		? ParserSuccessResult<`${Data1}${Data2}`, Rest>
+		: ParserErrorResult<"Pair didn't match, return arguments from Seq didn't match, implementation error">
+	: SeqApplImpl<Data, Arg> extends ParserErrorResult<infer Add>
+		? Add extends {
+				message: infer Mes extends string;
+				result: infer Res;
+				index: infer Idx;
+			}
+			? Mes extends `Seq${infer RestMes}`
+				? ParserErrorResult<{ message: `Pair${RestMes}`; result: Res; index: Idx }>
+				: ParserErrorResult<Add>
+			: ParserErrorResult<"Pair didn't match, error message from Seq didn't match, implementation error">
+		: ParserErrorResult<"Pair didn't match, not a valid ParserResult, implementation error">;
 
 type LazyParserAppl<Op, Data, Arg> = Op extends JustKw
 	? JustApplImpl<Data, Arg>
@@ -158,12 +208,14 @@ type LazyParserAppl<Op, Data, Arg> = Op extends JustKw
 			? LeftApplImpl<Data, Arg>
 			: Op extends RightKw
 				? RightApplImpl<Data, Arg>
-				: {
-						todo: 2;
-						op: Op;
-						data: Data;
-						arg: Arg;
-					};
+				: Op extends PairKw
+					? PairApplImpl<Data, Arg>
+					: {
+							todo: 2;
+							op: Op;
+							data: Data;
+							arg: Arg;
+						};
 
 type Parse<Operation, Argument> = Operation extends LazyParserMetadata<infer T extends string>
 	? LazyParser<T, Argument>
@@ -220,7 +272,7 @@ type just_parse_check_4 = Expect<
 	Equal<Parse<JustTestParser2, "bc">, ParserSuccessResult<"b", "c">>
 >;
 
-// seq checks
+// seq tests
 
 type seq_arg_check_0 = Expect<
 	Equal<
@@ -275,6 +327,7 @@ type seq_parse_check_1 = Expect<
 		ParserErrorResult<{
 			message: "Seq didn't match, first parser didn't match";
 			result: ParserErrorResult<"Just didn't match, case 1">;
+			index: 1;
 		}>
 	>
 >;
@@ -284,6 +337,7 @@ type seq_parse_check_2 = Expect<
 		ParserErrorResult<{
 			message: "Seq didn't match, first parser didn't match";
 			result: ParserErrorResult<"Just didn't match, case 2">;
+			index: 1;
 		}>
 	>
 >;
@@ -293,7 +347,8 @@ type seq_parse_check_3 = Expect<
 		Parse<SeqTestParser1, "1">,
 		ParserErrorResult<{
 			message: "Seq didn't match, second parser didn't match";
-			result: ParserErrorResult<"Just didn't match, case 1">;
+			result: [ParserSuccessResult<"1", "">, ParserErrorResult<"Just didn't match, case 1">];
+			index: 2;
 		}>
 	>
 >;
@@ -302,12 +357,13 @@ type seq_parse_check_4 = Expect<
 		Parse<SeqTestParser1, "11">,
 		ParserErrorResult<{
 			message: "Seq didn't match, second parser didn't match";
-			result: ParserErrorResult<"Just didn't match, case 2">;
+			result: [ParserSuccessResult<"1", "1">, ParserErrorResult<"Just didn't match, case 2">];
+			index: 2;
 		}>
 	>
 >;
 
-// right checks
+// right tests
 
 type right_arg_check_0 = Expect<
 	Equal<
@@ -360,8 +416,9 @@ type right_parse_check_1 = Expect<
 	Equal<
 		Parse<RightTestParser1, "">,
 		ParserErrorResult<{
-			message: "Seq didn't match, first parser didn't match";
+			message: "Right didn't match, first parser didn't match";
 			result: ParserErrorResult<"Just didn't match, case 1">;
+			index: 1;
 		}>
 	>
 >;
@@ -369,8 +426,9 @@ type right_parse_check_2 = Expect<
 	Equal<
 		Parse<RightTestParser1, "0">,
 		ParserErrorResult<{
-			message: "Seq didn't match, first parser didn't match";
+			message: "Right didn't match, first parser didn't match";
 			result: ParserErrorResult<"Just didn't match, case 2">;
+			index: 1;
 		}>
 	>
 >;
@@ -379,8 +437,9 @@ type right_parse_check_3 = Expect<
 	Equal<
 		Parse<RightTestParser1, "1">,
 		ParserErrorResult<{
-			message: "Seq didn't match, second parser didn't match";
-			result: ParserErrorResult<"Just didn't match, case 1">;
+			message: "Right didn't match, second parser didn't match";
+			result: [ParserSuccessResult<"1", "">, ParserErrorResult<"Just didn't match, case 1">];
+			index: 2;
 		}>
 	>
 >;
@@ -388,13 +447,14 @@ type right_parse_check_4 = Expect<
 	Equal<
 		Parse<RightTestParser1, "11">,
 		ParserErrorResult<{
-			message: "Seq didn't match, second parser didn't match";
-			result: ParserErrorResult<"Just didn't match, case 2">;
+			message: "Right didn't match, second parser didn't match";
+			result: [ParserSuccessResult<"1", "1">, ParserErrorResult<"Just didn't match, case 2">];
+			index: 2;
 		}>
 	>
 >;
 
-// left checks
+// left tests
 
 type left_arg_check_0 = Expect<
 	Equal<
@@ -447,8 +507,9 @@ type left_parse_check_1 = Expect<
 	Equal<
 		Parse<LeftTestParser1, "">,
 		ParserErrorResult<{
-			message: "Seq didn't match, first parser didn't match";
+			message: "Left didn't match, first parser didn't match";
 			result: ParserErrorResult<"Just didn't match, case 1">;
+			index: 1;
 		}>
 	>
 >;
@@ -456,8 +517,9 @@ type left_parse_check_2 = Expect<
 	Equal<
 		Parse<LeftTestParser1, "0">,
 		ParserErrorResult<{
-			message: "Seq didn't match, first parser didn't match";
+			message: "Left didn't match, first parser didn't match";
 			result: ParserErrorResult<"Just didn't match, case 2">;
+			index: 1;
 		}>
 	>
 >;
@@ -466,8 +528,9 @@ type left_parse_check_3 = Expect<
 	Equal<
 		Parse<LeftTestParser1, "1">,
 		ParserErrorResult<{
-			message: "Seq didn't match, second parser didn't match";
-			result: ParserErrorResult<"Just didn't match, case 1">;
+			message: "Left didn't match, second parser didn't match";
+			result: [ParserSuccessResult<"1", "">, ParserErrorResult<"Just didn't match, case 1">];
+			index: 2;
 		}>
 	>
 >;
@@ -475,8 +538,100 @@ type left_parse_check_4 = Expect<
 	Equal<
 		Parse<LeftTestParser1, "11">,
 		ParserErrorResult<{
-			message: "Seq didn't match, second parser didn't match";
+			message: "Left didn't match, second parser didn't match";
+			result: [ParserSuccessResult<"1", "1">, ParserErrorResult<"Just didn't match, case 2">];
+			index: 2;
+		}>
+	>
+>;
+
+// pair tests
+
+type pair_arg_check_0 = Expect<
+	Equal<
+		Parse<Pair, 1>,
+		{
+			error: "invalid argument for Pair";
+			argument: 1;
+			message: "argument is not a tuple with size 2";
+		}
+	>
+>;
+type pair_arg_check_1 = Expect<
+	Equal<
+		Parse<Pair, "11">,
+		{
+			error: "invalid argument for Pair";
+			argument: "11";
+			message: "argument is not a tuple with size 2";
+		}
+	>
+>;
+type pair_arg_check_2 = Expect<
+	Equal<
+		Parse<Pair, [1]>,
+		{
+			error: "invalid argument for Pair";
+			argument: [1];
+			message: "argument is not a tuple with size 2";
+		}
+	>
+>;
+
+type pair_arg_check_3 = Expect<
+	Equal<
+		Parse<Pair, [Parse<Just, "1">, Parse<Just, "2">]>,
+		LazyOperation<PairKw, [LazyOperation<JustKw, "1">, LazyOperation<JustKw, "2">]>
+	>
+>;
+
+type pair_is_parser = Expect<
+	Equal<IsParser<Parse<Pair, [Parse<Just, "1">, Parse<Just, "2">]>>, true>
+>;
+
+type PairTestParser1 = Parse<Pair, [Parse<Just, "1">, Parse<Just, "2">]>;
+
+type pair_parse_check_0 = Expect<
+	Equal<Parse<PairTestParser1, "123">, ParserSuccessResult<"12", "3">>
+>;
+type pair_parse_check_1 = Expect<
+	Equal<
+		Parse<PairTestParser1, "">,
+		ParserErrorResult<{
+			message: "Pair didn't match, first parser didn't match";
+			result: ParserErrorResult<"Just didn't match, case 1">;
+			index: 1;
+		}>
+	>
+>;
+type pair_parse_check_2 = Expect<
+	Equal<
+		Parse<PairTestParser1, "0">,
+		ParserErrorResult<{
+			message: "Pair didn't match, first parser didn't match";
 			result: ParserErrorResult<"Just didn't match, case 2">;
+			index: 1;
+		}>
+	>
+>;
+
+type pair_parse_check_3 = Expect<
+	Equal<
+		Parse<PairTestParser1, "1">,
+		ParserErrorResult<{
+			message: "Pair didn't match, second parser didn't match";
+			result: [ParserSuccessResult<"1", "">, ParserErrorResult<"Just didn't match, case 1">];
+			index: 2;
+		}>
+	>
+>;
+type pair_parse_check_4 = Expect<
+	Equal<
+		Parse<PairTestParser1, "11">,
+		ParserErrorResult<{
+			message: "Pair didn't match, second parser didn't match";
+			result: [ParserSuccessResult<"1", "1">, ParserErrorResult<"Just didn't match, case 2">];
+			index: 2;
 		}>
 	>
 >;
