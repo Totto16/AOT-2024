@@ -30,6 +30,9 @@ type EOF = LazyParserMetadata<"eof">;
 type JustKw = "just";
 type Just = LazyParserMetadata<JustKw>;
 
+type NoneOfKw = "noneof";
+type NoneOf = LazyParserMetadata<NoneOfKw>;
+
 type LeftKw = "left";
 type Left = LazyParserMetadata<LeftKw>;
 
@@ -54,13 +57,11 @@ type Maybe = LazyParserMetadata<"maybe">;
 
 type MaybeResult = LazyParserMetadata<"mayberesult">;
 
-type NoneOf = LazyParserMetadata<"noneof">;
-
 type SepBy0 = LazyParserMetadata<"sepby0">;
 
 // implementations
 
-type IsValidJustArg<T> = T extends string
+type IsValidTokenArg<T> = T extends string
 	? T extends `${infer A}${infer B extends ""}`
 		? true
 		: "argument length is not 1"
@@ -75,46 +76,54 @@ type IsValidTupleArg<T> = T extends [infer A, infer B]
 	: "argument is not a tuple with size 2";
 
 type LazyParser<T extends string, Argument> = T extends JustKw
-	? IsValidJustArg<Argument> extends true
+	? IsValidTokenArg<Argument> extends true
 		? LazyOperation<T, Argument>
 		: {
 				error: "invalid argument for Just";
 				argument: Argument;
-				message: IsValidJustArg<Argument>;
+				message: IsValidTokenArg<Argument>;
 			}
-	: T extends RightKw
-		? IsValidTupleArg<Argument> extends true
+	: T extends NoneOfKw
+		? IsValidTokenArg<Argument> extends true
 			? LazyOperation<T, Argument>
 			: {
-					error: "invalid argument for Right";
+					error: "invalid argument for NoneOf";
 					argument: Argument;
-					message: IsValidTupleArg<Argument>;
+					message: IsValidTokenArg<Argument>;
 				}
-		: T extends LeftKw
+		: T extends RightKw
 			? IsValidTupleArg<Argument> extends true
 				? LazyOperation<T, Argument>
 				: {
-						error: "invalid argument for Left";
+						error: "invalid argument for Right";
 						argument: Argument;
 						message: IsValidTupleArg<Argument>;
 					}
-			: T extends SeqKw
+			: T extends LeftKw
 				? IsValidTupleArg<Argument> extends true
 					? LazyOperation<T, Argument>
 					: {
-							error: "invalid argument for Seq";
+							error: "invalid argument for Left";
 							argument: Argument;
 							message: IsValidTupleArg<Argument>;
 						}
-				: T extends PairKw
+				: T extends SeqKw
 					? IsValidTupleArg<Argument> extends true
 						? LazyOperation<T, Argument>
 						: {
-								error: "invalid argument for Pair";
+								error: "invalid argument for Seq";
 								argument: Argument;
 								message: IsValidTupleArg<Argument>;
 							}
-					: { todo: 0; data: T; arg: Argument };
+					: T extends PairKw
+						? IsValidTupleArg<Argument> extends true
+							? LazyOperation<T, Argument>
+							: {
+									error: "invalid argument for Pair";
+									argument: Argument;
+									message: IsValidTupleArg<Argument>;
+								}
+						: { todo: 0; data: T; arg: Argument };
 
 type JustApplImpl<Data, Arg> = Arg extends string
 	? Arg extends `${infer FirstChar}${infer Rest}`
@@ -123,6 +132,14 @@ type JustApplImpl<Data, Arg> = Arg extends string
 			: ParserErrorResult<"Just didn't match, case 2">
 		: ParserErrorResult<"Just didn't match, case 1">
 	: ParserErrorResult<"Just didn't match, Arguments didn't match, implementation error">;
+
+type NoneOfApplImpl<Data, Arg> = Arg extends string
+	? Arg extends `${infer FirstChar}${infer Rest}`
+		? FirstChar extends Data
+			? ParserErrorResult<"NoneOf didn't match, case 2">
+			: ParserSuccessResult<FirstChar, Rest>
+		: ParserErrorResult<"NoneOf didn't match, case 1">
+	: ParserErrorResult<"NoneOf didn't match, Arguments didn't match, implementation error">;
 
 type SeqApplImpl<Data, Arg> = Data extends [
 	infer Parser1 extends Parser,
@@ -202,20 +219,22 @@ type PairApplImpl<Data, Arg> = SeqApplImpl<Data, Arg> extends ParserSuccessResul
 
 type LazyParserAppl<Op, Data, Arg> = Op extends JustKw
 	? JustApplImpl<Data, Arg>
-	: Op extends SeqKw
-		? SeqApplImpl<Data, Arg>
-		: Op extends LeftKw
-			? LeftApplImpl<Data, Arg>
-			: Op extends RightKw
-				? RightApplImpl<Data, Arg>
-				: Op extends PairKw
-					? PairApplImpl<Data, Arg>
-					: {
-							todo: 2;
-							op: Op;
-							data: Data;
-							arg: Arg;
-						};
+	: Op extends NoneOfKw
+		? NoneOfApplImpl<Data, Arg>
+		: Op extends SeqKw
+			? SeqApplImpl<Data, Arg>
+			: Op extends LeftKw
+				? LeftApplImpl<Data, Arg>
+				: Op extends RightKw
+					? RightApplImpl<Data, Arg>
+					: Op extends PairKw
+						? PairApplImpl<Data, Arg>
+						: {
+								todo: 2;
+								op: Op;
+								data: Data;
+								arg: Arg;
+							};
 
 type Parse<Operation, Argument> = Operation extends LazyParserMetadata<infer T extends string>
 	? LazyParser<T, Argument>
@@ -270,6 +289,63 @@ type just_parse_check_3 = Expect<
 >;
 type just_parse_check_4 = Expect<
 	Equal<Parse<JustTestParser2, "bc">, ParserSuccessResult<"b", "c">>
+>;
+
+// noneof tests
+
+type none_of_arg_check_0 = Expect<
+	Equal<
+		Parse<NoneOf, 1>,
+		{
+			error: "invalid argument for NoneOf";
+			argument: 1;
+			message: "argument is not a string";
+		}
+	>
+>;
+type none_of_arg_check_1 = Expect<
+	Equal<
+		Parse<NoneOf, "11">,
+		{
+			error: "invalid argument for NoneOf";
+			argument: "11";
+			message: "argument length is not 1";
+		}
+	>
+>;
+type none_of_arg_check_2 = Expect<Equal<Parse<NoneOf, "1">, LazyOperation<NoneOfKw, "1">>>;
+type none_of_arg_check_3 = Expect<
+	Equal<Parse<NoneOf, "1" | "2">, LazyOperation<NoneOfKw, "1" | "2">>
+>;
+
+type none_of_is_parser = Expect<Equal<IsParser<Parse<NoneOf, "1">>, true>>;
+
+type NoneOfTestParser1 = Parse<NoneOf, "a">;
+
+type none_of_parse_check_0 = Expect<
+	Equal<Parse<NoneOfTestParser1, "gbb">, ParserSuccessResult<"g", "bb">>
+>;
+type none_of_parse_check_1 = Expect<
+	Equal<Parse<NoneOfTestParser1, "abb">, ParserErrorResult<"NoneOf didn't match, case 2">>
+>;
+type none_of_parse_check_2 = Expect<
+	Equal<Parse<NoneOfTestParser1, "">, ParserErrorResult<"NoneOf didn't match, case 1">>
+>;
+
+type NoneOfTestParser2 = Parse<NoneOf, "a" | "b">;
+
+type none_of_parse_check_3 = Expect<
+	Equal<Parse<NoneOfTestParser2, "ca">, ParserSuccessResult<"c", "a">>
+>;
+type none_of_parse_check_4 = Expect<
+	Equal<Parse<NoneOfTestParser2, "cb">, ParserSuccessResult<"c", "b">>
+>;
+type none_of_parse_check_5 = Expect<
+	Equal<Parse<NoneOfTestParser2, "aff">, ParserErrorResult<"NoneOf didn't match, case 2">>
+>;
+
+type none_of_parse_check_6 = Expect<
+	Equal<Parse<NoneOfTestParser2, "bff">, ParserErrorResult<"NoneOf didn't match, case 2">>
 >;
 
 // seq tests
