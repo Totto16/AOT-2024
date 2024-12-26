@@ -10,7 +10,7 @@ type LazyOperation<T, Argument> = { parser: true; op: T; arg: Argument };
 
 type ParserResult<T> = { success: boolean; data: T; rest: string };
 
-type ParserErrorResult<Add = undefined> = { success: false; data: null; rest: ""; additional: Add };
+type ParserErrorResult<Add = undefined> = { success: false; additional: Add };
 
 type ParserSuccessResult<Data, Rest extends string> = { success: true; data: Data; rest: Rest };
 
