@@ -1,6 +1,6 @@
 import type { Expect, Equal } from "type-testing"
 
-type t0_actual = Parse<`
+type t0_actual = Parse19<`
 let teddyBear = "standard_model";
 `>
 type t0_expected = [
@@ -11,7 +11,7 @@ type t0_expected = [
 ]
 type t0 = Expect<Equal<t0_actual, t0_expected>>
 
-type t1_actual = Parse<`
+type t1_actual = Parse19<`
 buildToy(teddyBear);
 `>
 type t1_expected = [
@@ -22,7 +22,7 @@ type t1_expected = [
 ]
 type t1 = Expect<Equal<t1_actual, t1_expected>>
 
-type t2_actual = Parse<`
+type t2_actual = Parse19<`
 let robotDog = "deluxe_model";
 assembleToy(robotDog);
 `>
@@ -38,7 +38,7 @@ type t2_expected = [
 ]
 type t2 = Expect<Equal<t2_actual, t2_expected>>
 
-type t3_actual = Parse<`
+type t3_actual = Parse19<`
   const giftBox = "premium_wrap";
     var ribbon123 = "silk";
   
@@ -68,6 +68,6 @@ type t3_expected = [
 type t3 = Expect<Equal<t3_actual, t3_expected>>
 
 type t4_input = "\n\t\r \t\r "
-type t4_actual = Parse<t4_input>
+type t4_actual = Parse19<t4_input>
 type t4_expected = []
 type t4 = Expect<Equal<t4_actual, t4_expected>>
