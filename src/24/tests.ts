@@ -288,8 +288,8 @@ type DoJoin<T extends string[], Acc extends string = ""> = T extends [
   ? DoJoin<Rest, `${Acc}${Head}`>
   : Acc;
 
-type DigitParser = Parse<Just, Digit>;
-type IntParser = Parse<
+export type DigitParser = Parse<Just, Digit>;
+export type IntParser = Parse<
   MapResult,
   [Parse<Many1, DigitParser>, Join, StringToNumber]
 >;
