@@ -18,7 +18,7 @@ type ParserGeneric<T> = (inp: string) => ParserResult<T>;
 
 type LazyParserImpl = LazyOperation<unknown, unknown>;
 
-type Parser = ParserGeneric<unknown> | LazyParserImpl;
+type Parser = ParserGeneric<unknown> | LazyParserImpl | (() => LazyParserImpl);
 
 type IsParser<T> = T extends Parser ? true : false;
 
@@ -67,11 +67,12 @@ interface MapperImpl<T, A> {
 
 type Mapper = MapperImpl<unknown, unknown>;
 
+type SepBy0Kw = "sepby0";
+type SepBy0 = LazyParserMetadata<SepBy0Kw>;
+
 type Maybe = LazyParserMetadata<"maybe">;
 
 type MaybeResult = LazyParserMetadata<"mayberesult">;
-
-type SepBy0 = LazyParserMetadata<"sepby0">;
 
 // implementations
 
@@ -88,6 +89,8 @@ type StrictMap = {
 	[key in RightKw]: true;
 } & {
 	[key in PairKw]: true;
+} & {
+	[key in SepBy0Kw]: true;
 };
 
 type IsValidTokenArg<T, Strict extends boolean> = Strict extends true
@@ -236,7 +239,15 @@ type LazyParser<T extends string, Argument> = T extends JustKw
 													argument: Argument;
 													message: IsValidMapResultArg<Argument>;
 												}
-										: { todo: 0; data: T; arg: Argument };
+										: T extends SepBy0Kw
+											? IsValidTupleArg<Argument, StrictMap[SepBy0Kw]> extends true
+												? LazyOperation<T, Argument>
+												: {
+														error: "invalid argument for SepBy0";
+														argument: Argument;
+														message: IsValidTupleArg<Argument, StrictMap[SepBy0Kw]>;
+													}
+											: { todo: 0; data: T; arg: Argument };
 
 type JustApplImpl<Data, Arg> = Arg extends string
 	? Arg extends `${infer FirstChar}${infer Rest}`
@@ -405,6 +416,35 @@ type MapResultApplImpl<Data, Arg> = Data extends unknown[]
 		: ParserErrorResult<"MapResult didn't match, Arguments didn't match, implementation error 2">
 	: ParserErrorResult<"MapResult didn't match, Arguments didn't match, implementation error 1">;
 
+interface SepBy0DataGetterMapper extends Mapper {
+	map: (
+		data: this["data"],
+	) => typeof data extends [infer SepResult, infer ActualResult]
+		? ActualResult
+		: { error: "implementation error in SepBy0 implemenatation" };
+}
+
+type SepBy0ApplImpl<Data, Arg> = Data extends [
+	infer ContentParser extends Parser,
+	infer SepParser extends Parser,
+]
+	? Arg extends string
+		? Parse<ContentParser, Arg> extends ParserSuccessResult<infer Data1, infer Rest1>
+			? Parse<
+					Parse<
+						Many0,
+						Parse<MapResult, [Parse<Seq, [SepParser, ContentParser]>, SepBy0DataGetterMapper]>
+					>,
+					Rest1
+				> extends ParserSuccessResult<infer Data2, infer Rest2>
+				? Data2 extends unknown[]
+					? ParserSuccessResult<[Data1, ...Data2], Rest2>
+					: ParserErrorResult<"SepBy0 didn't match, invalid internal parser result, is not an array, implementation error">
+				: ParserErrorResult<"SepBy0 didn't match, invalid internal parser result, Many0 should always match, implementation error">
+			: ParserSuccessResult<[], Arg>
+		: ParserErrorResult<"SepBy0 didn't match, invalid arguments, implementation error, arg is not a string">
+	: ParserErrorResult<"SepBy0 didn't match, invalid arguments, implementation error, data is not a tuple of parsers">;
+
 type LazyParserAppl<Op, Data, Arg> = Op extends JustKw
 	? JustApplImpl<Data, Arg>
 	: Op extends NoneOfKw
@@ -427,12 +467,14 @@ type LazyParserAppl<Op, Data, Arg> = Op extends JustKw
 										? Many1ApplImpl<Data, Arg>
 										: Op extends MapResultKw
 											? MapResultApplImpl<Data, Arg>
-											: {
-													todo: 2;
-													op: Op;
-													data: Data;
-													arg: Arg;
-												};
+											: Op extends SepBy0Kw
+												? SepBy0ApplImpl<Data, Arg>
+												: {
+														todo: 2;
+														op: Op;
+														data: Data;
+														arg: Arg;
+													};
 
 type Parse<Operation, Argument> = Operation extends LazyParserMetadata<infer T extends string>
 	? LazyParser<T, Argument>
@@ -1235,4 +1277,65 @@ type map_result_parse_check_3 = Expect<
 >;
 type map_result_parse_check_4 = Expect<
 	Equal<Parse<MapResultTestParser2, "11">, ParserSuccessResult<true, "1">>
+>;
+
+// sepby0 tests
+
+type sepby0_arg_check_0 = Expect<
+	Equal<
+		Parse<SepBy0, 1>,
+		{
+			error: "invalid argument for SepBy0";
+			argument: 1;
+			message: "argument is not a tuple with size 2";
+		}
+	>
+>;
+type sepby0_arg_check_1 = Expect<
+	Equal<
+		Parse<SepBy0, "11">,
+		{
+			error: "invalid argument for SepBy0";
+			argument: "11";
+			message: "argument is not a tuple with size 2";
+		}
+	>
+>;
+type sepby0_arg_check_2 = Expect<
+	Equal<
+		Parse<SepBy0, [1]>,
+		{
+			error: "invalid argument for SepBy0";
+			argument: [1];
+			message: "argument is not a tuple with size 2";
+		}
+	>
+>;
+
+type sepby0_arg_check_3 = Expect<
+	Equal<
+		Parse<SepBy0, [Parse<Just, "1">, Parse<Just, "2">]>,
+		LazyOperation<SepBy0Kw, [LazyOperation<JustKw, "1">, LazyOperation<JustKw, "2">]>
+	>
+>;
+
+type sepby0_is_parser = Expect<
+	Equal<IsParser<Parse<SepBy0, [Parse<Just, "1">, Parse<Just, "2">]>>, true>
+>;
+
+type SepBy0TestParser = Parse<SepBy0, [Parse<Just, "1">, Parse<Just, ",">]>;
+
+type sepby0_parse_check_0 = Expect<
+	Equal<Parse<SepBy0TestParser, "123">, ParserSuccessResult<["1"], "23">>
+>;
+type sepby0_parse_check_1 = Expect<Equal<Parse<SepBy0TestParser, "">, ParserSuccessResult<[], "">>>;
+type sepby0_parse_check_2 = Expect<
+	Equal<Parse<SepBy0TestParser, "0">, ParserSuccessResult<[], "0">>
+>;
+
+type sepby0_parse_check_3 = Expect<
+	Equal<Parse<SepBy0TestParser, "1">, ParserSuccessResult<["1"], "">>
+>;
+type sepby0_parse_check_4 = Expect<
+	Equal<Parse<SepBy0TestParser, "1,1">, ParserSuccessResult<["1", "1"], "">>
 >;
