@@ -23,7 +23,8 @@ type Parser = ParserGeneric<unknown> | LazyParerImpl;
 type IsParser<T> = T extends Parser ? true : false;
 
 // parser metadata
-type Choice = LazyParserMetadata<"choice">;
+type ChoiceKw = "choice";
+type Choice = LazyParserMetadata<ChoiceKw>;
 
 type EOFKw = "eof";
 type EOF = LazyOperation<EOFKw, "">;
@@ -76,6 +77,22 @@ type IsValidTupleArg<T> = T extends [infer A, infer B]
 		: "argument 1 is not a parser"
 	: "argument is not a tuple with size 2";
 
+type AreAllParsers<T extends unknown[]> = T extends []
+	? true
+	: T extends [infer FirstElem, ...infer Rest]
+		? FirstElem extends Parser
+			? AreAllParsers<Rest>
+			: { message: "argument is not an parser"; data: FirstElem }
+		: true;
+
+type IsValidChoiceArg<T> = T extends unknown[]
+	? T extends [infer FirstElem, ...infer Rest]
+		? FirstElem extends Parser
+			? AreAllParsers<Rest>
+			: { message: "argument is not an parser"; data: FirstElem }
+		: "argument is an empty array"
+	: "argument is not an array";
+
 type LazyParser<T extends string, Argument> = T extends JustKw
 	? IsValidTokenArg<Argument> extends true
 		? LazyOperation<T, Argument>
@@ -124,7 +141,15 @@ type LazyParser<T extends string, Argument> = T extends JustKw
 									argument: Argument;
 									message: IsValidTupleArg<Argument>;
 								}
-						: { todo: 0; data: T; arg: Argument };
+						: T extends ChoiceKw
+							? IsValidChoiceArg<Argument> extends true
+								? LazyOperation<T, Argument>
+								: {
+										error: "invalid argument for Choice";
+										argument: Argument;
+										message: IsValidChoiceArg<Argument>;
+									}
+							: { todo: 0; data: T; arg: Argument };
 
 type JustApplImpl<Data, Arg> = Arg extends string
 	? Arg extends `${infer FirstChar}${infer Rest}`
@@ -224,6 +249,16 @@ type EOFApplImpl<Data, Arg> = Data extends ""
 		: ParserErrorResult<"EOF didn't match">
 	: ParserErrorResult<"EOF didn't match, not a valid argument, implementation error">;
 
+type ChoiceApplImpl<Data, Arg> = Data extends Array<Parser>
+	? Data extends []
+		? ParserErrorResult<"Choice didn't match, none of the subparsers matched">
+		: Data extends [infer Parser1, ...infer RestParsers]
+			? Parse<Parser1, Arg> extends ParserSuccessResult<infer Data1, infer Rest1>
+				? ParserSuccessResult<Data1, Rest1>
+				: ChoiceApplImpl<RestParsers, Arg>
+			: ParserErrorResult<"Choice didn't match, unreachable case: reason, [] already checked">
+	: ParserErrorResult<"Choice didn't match, Arguments didn't match, implementation error">;
+
 type LazyParserAppl<Op, Data, Arg> = Op extends JustKw
 	? JustApplImpl<Data, Arg>
 	: Op extends NoneOfKw
@@ -238,12 +273,14 @@ type LazyParserAppl<Op, Data, Arg> = Op extends JustKw
 						? PairApplImpl<Data, Arg>
 						: Op extends EOFKw
 							? EOFApplImpl<Data, Arg>
-							: {
-									todo: 2;
-									op: Op;
-									data: Data;
-									arg: Arg;
-								};
+							: Op extends ChoiceKw
+								? ChoiceApplImpl<Data, Arg>
+								: {
+										todo: 2;
+										op: Op;
+										data: Data;
+										arg: Arg;
+									};
 
 type Parse<Operation, Argument> = Operation extends LazyParserMetadata<infer T extends string>
 	? LazyParser<T, Argument>
@@ -727,3 +764,100 @@ type eof_is_parser = Expect<Equal<IsParser<EOF>, true>>;
 
 type eof_parse_check_0 = Expect<Equal<Parse<EOF, "">, ParserSuccessResult<"", "">>>;
 type eof_parse_check_1 = Expect<Equal<Parse<EOF, "1">, ParserErrorResult<"EOF didn't match">>>;
+
+// pair tests
+
+type choice_arg_check_0 = Expect<
+	Equal<
+		Parse<Choice, 1>,
+		{
+			error: "invalid argument for Choice";
+			argument: 1;
+			message: "argument is not an array";
+		}
+	>
+>;
+type choice_arg_check_1 = Expect<
+	Equal<
+		Parse<Choice, "11">,
+		{
+			error: "invalid argument for Choice";
+			argument: "11";
+			message: "argument is not an array";
+		}
+	>
+>;
+type choice_arg_check_2 = Expect<
+	Equal<
+		Parse<Choice, [1]>,
+		{
+			error: "invalid argument for Choice";
+			argument: [1];
+			message: {
+				message: "argument is not an parser";
+				data: 1;
+			};
+		}
+	>
+>;
+
+type choice_arg_check_3 = Expect<
+	Equal<
+		Parse<Choice, []>,
+		{
+			error: "invalid argument for Choice";
+			argument: [];
+			message: "argument is an empty array";
+		}
+	>
+>;
+
+type choice_arg_check_4 = Expect<
+	Equal<
+		Parse<Choice, [EOF, 3]>,
+		{
+			error: "invalid argument for Choice";
+			argument: [EOF, 3];
+			message: {
+				message: "argument is not an parser";
+				data: 3;
+			};
+		}
+	>
+>;
+
+type choice_arg_check_5 = Expect<
+	Equal<
+		Parse<Choice, [Parse<Just, "1">, Parse<Just, "2">]>,
+		LazyOperation<ChoiceKw, [LazyOperation<JustKw, "1">, LazyOperation<JustKw, "2">]>
+	>
+>;
+
+type choice_is_parser = Expect<
+	Equal<IsParser<Parse<Pair, [Parse<Just, "1">, Parse<Just, "2">]>>, true>
+>;
+
+type ChoiceTestParser1 = Parse<Choice, [Parse<Just, "1">, Parse<Just, "2">]>;
+
+type choice_parse_check_0 = Expect<
+	Equal<Parse<ChoiceTestParser1, "123">, ParserSuccessResult<"1", "23">>
+>;
+type choice_parse_check_1 = Expect<
+	Equal<
+		Parse<ChoiceTestParser1, "">,
+		ParserErrorResult<"Choice didn't match, none of the subparsers matched">
+	>
+>;
+type choice_parse_check_2 = Expect<
+	Equal<
+		Parse<ChoiceTestParser1, "0">,
+		ParserErrorResult<"Choice didn't match, none of the subparsers matched">
+	>
+>;
+
+type choice_parse_check_3 = Expect<
+	Equal<Parse<ChoiceTestParser1, "1">, ParserSuccessResult<"1", "">>
+>;
+type choice_parse_check_4 = Expect<
+	Equal<Parse<ChoiceTestParser1, "11">, ParserSuccessResult<"1", "1">>
+>;
