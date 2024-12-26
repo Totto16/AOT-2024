@@ -22,6 +22,8 @@ type Parser = ParserGeneric<unknown> | LazyParerImpl;
 
 type IsParser<T> = T extends Parser ? true : false;
 
+type IsMapper<T> = T extends Mapper ? true : false;
+
 // parser metadata
 type ChoiceKw = "choice";
 type Choice = LazyParserMetadata<ChoiceKw>;
@@ -53,9 +55,17 @@ type Many0 = LazyParserMetadata<Many0Kw>;
 type Many1Kw = "many1";
 type Many1 = LazyParserMetadata<Many1Kw>;
 
-type MapResult = LazyParserMetadata<"mapresult">;
+type MapResultKw = "mapresult";
+type MapResult = LazyParserMetadata<MapResultKw>;
 
-type Mapper = LazyParserMetadata<"mapper">;
+type MapperFunction<T, A> = (data: T) => A;
+
+interface MapperImpl<T, A> {
+	data: T;
+	map: MapperFunction<T, A>;
+}
+
+type Mapper = MapperImpl<unknown, unknown>;
 
 type Maybe = LazyParserMetadata<"maybe">;
 
@@ -96,6 +106,24 @@ type IsValidChoiceArg<T> = T extends unknown[]
 	: "argument is not an array";
 
 type IsValidManyArg<T> = T extends Parser ? true : "argument is not an parser";
+
+type AreAllMappers<T extends unknown[]> = T extends []
+	? true
+	: T extends [infer FirstElem, ...infer Rest]
+		? FirstElem extends Mapper
+			? AreAllMappers<Rest>
+			: { message: "argument is not a Mapper"; data: FirstElem }
+		: true;
+
+type IsValidMapResultArg<T> = T extends unknown[]
+	? T extends [infer Pars, ...infer Rest]
+		? Pars extends Parser
+			? Rest extends [infer _1, ...infer _2]
+				? AreAllMappers<Rest>
+				: "argument has no mappers but just one parser"
+			: { message: "argument is not an parser"; data: Pars }
+		: "argument is an empty array"
+	: "argument is not an array";
 
 type LazyParser<T extends string, Argument> = T extends JustKw
 	? IsValidTokenArg<Argument> extends true
@@ -169,7 +197,15 @@ type LazyParser<T extends string, Argument> = T extends JustKw
 												argument: Argument;
 												message: IsValidManyArg<Argument>;
 											}
-									: { todo: 0; data: T; arg: Argument };
+									: T extends MapResultKw
+										? IsValidMapResultArg<Argument> extends true
+											? LazyOperation<T, Argument>
+											: {
+													error: "invalid argument for MapResult";
+													argument: Argument;
+													message: IsValidMapResultArg<Argument>;
+												}
+										: { todo: 0; data: T; arg: Argument };
 
 type JustApplImpl<Data, Arg> = Arg extends string
 	? Arg extends `${infer FirstChar}${infer Rest}`
@@ -289,16 +325,32 @@ type ManyGeneralApplImpl<Pars extends Parser, Arg extends string, Acc extends un
 type Many0ApplImpl<Data, Arg> = Data extends Parser
 	? Arg extends string
 		? ManyGeneralApplImpl<Data, Arg, []>
-		: ParserErrorResult<"Choice didn't match, Arguments didn't match, implementation error 2">
-	: ParserErrorResult<"Choice didn't match, Arguments didn't match, implementation error 1">;
+		: ParserErrorResult<"Many0 didn't match, Arguments didn't match, implementation error 2">
+	: ParserErrorResult<"Many0 didn't match, Arguments didn't match, implementation error 1">;
 
 type Many1ApplImpl<Data, Arg> = Data extends Parser
 	? Arg extends string
 		? Parse<Data, Arg> extends ParserSuccessResult<infer Data1, infer Rest1>
 			? ManyGeneralApplImpl<Data, Rest1, [Data1]>
 			: ParserErrorResult<"Many1 didn't match, matched 0 times">
-		: ParserErrorResult<"Choice didn't match, Arguments didn't match, implementation error 2">
-	: ParserErrorResult<"Choice didn't match, Arguments didn't match, implementation error 1">;
+		: ParserErrorResult<"Many1 didn't match, Arguments didn't match, implementation error 2">
+	: ParserErrorResult<"Many1 didn't match, Arguments didn't match, implementation error 1">;
+
+type MapSingleMapperImpl<Type, M extends Mapper> = ReturnType<(M & { data: Type })["map"]>;
+
+type MapMappersImpl<Initial, Mappers extends Mapper[]> = Mappers extends []
+	? Initial
+	: Mappers extends [infer Mapper1 extends Mapper, ...infer RestMappers extends Mapper[]]
+		? MapMappersImpl<MapSingleMapperImpl<Initial, Mapper1>, RestMappers>
+		: Initial;
+
+type MapResultApplImpl<Data, Arg> = Data extends unknown[]
+	? Data extends [infer Pars extends Parser, ...infer Mappers extends Mapper[]]
+		? Parse<Pars, Arg> extends ParserSuccessResult<infer Data1, infer Rest1>
+			? ParserSuccessResult<MapMappersImpl<Data1, Mappers>, Rest1>
+			: Parse<Pars, Arg>
+		: ParserErrorResult<"MapResult didn't match, Arguments didn't match, implementation error 2">
+	: ParserErrorResult<"MapResult didn't match, Arguments didn't match, implementation error 1">;
 
 type LazyParserAppl<Op, Data, Arg> = Op extends JustKw
 	? JustApplImpl<Data, Arg>
@@ -320,12 +372,14 @@ type LazyParserAppl<Op, Data, Arg> = Op extends JustKw
 									? Many0ApplImpl<Data, Arg>
 									: Op extends Many1Kw
 										? Many1ApplImpl<Data, Arg>
-										: {
-												todo: 2;
-												op: Op;
-												data: Data;
-												arg: Arg;
-											};
+										: Op extends MapResultKw
+											? MapResultApplImpl<Data, Arg>
+											: {
+													todo: 2;
+													op: Op;
+													data: Data;
+													arg: Arg;
+												};
 
 type Parse<Operation, Argument> = Operation extends LazyParserMetadata<infer T extends string>
 	? LazyParser<T, Argument>
@@ -1017,4 +1071,108 @@ type many1_parse_check_3 = Expect<
 >;
 type many1_parse_check_4 = Expect<
 	Equal<Parse<Many1TestParser, "11">, ParserSuccessResult<["1", "1"], "">>
+>;
+
+// Mapper Tests
+
+interface ToLiteralMapperTest<T> extends Mapper {
+	map: () => T;
+}
+
+interface ConsumeDataMapperTest extends Mapper {
+	map: (
+		data: this["data"],
+	) => typeof data extends string ? [typeof data, true] : [typeof data, false];
+}
+
+type is_mapper_0 = Expect<Equal<IsMapper<ToLiteralMapperTest<null>>, true>>;
+
+type is_mapper_1 = Expect<Equal<IsMapper<ConsumeDataMapperTest>, true>>;
+
+// map_result tests
+
+type map_result_arg_check_0 = Expect<
+	Equal<
+		Parse<MapResult, 1>,
+		{
+			error: "invalid argument for MapResult";
+			argument: 1;
+			message: "argument is not an array";
+		}
+	>
+>;
+type map_result_arg_check_1 = Expect<
+	Equal<
+		Parse<MapResult, []>,
+		{
+			error: "invalid argument for MapResult";
+			argument: [];
+			message: "argument is an empty array";
+		}
+	>
+>;
+type map_result_arg_check_2 = Expect<
+	Equal<
+		Parse<MapResult, [1]>,
+		{
+			error: "invalid argument for MapResult";
+			argument: [1];
+			message: {
+				message: "argument is not an parser";
+				data: 1;
+			};
+		}
+	>
+>;
+
+type map_result_arg_check_3 = Expect<
+	Equal<
+		Parse<MapResult, [Parse<Just, "1">]>,
+		{
+			error: "invalid argument for MapResult";
+			argument: [LazyOperation<"just", "1">];
+			message: "argument has no mappers but just one parser";
+		}
+	>
+>;
+
+type map_result_arg_check_4 = Expect<
+	Equal<
+		Parse<MapResult, [Parse<Just, "1">, ToLiteralMapperTest<null>]>,
+		LazyOperation<MapResultKw, [LazyOperation<JustKw, "1">, ToLiteralMapperTest<null>]>
+	>
+>;
+
+type map_result_is_parser = Expect<
+	Equal<IsParser<Parse<MapResult, [Parse<Just, "1">, ToLiteralMapperTest<null>]>>, true>
+>;
+
+type MapResultTestParser1 = Parse<
+	MapResult,
+	[
+		Parse<Choice, [Parse<Just, "1">, Parse<Seq, [Parse<Just, "2">, Parse<Just, "3">]>]>,
+		ConsumeDataMapperTest,
+	]
+>;
+
+type map_result_parse_check_0 = Expect<
+	Equal<Parse<MapResultTestParser1, "123">, ParserSuccessResult<["1", true], "23">>
+>;
+type map_result_parse_check_1 = Expect<
+	Equal<
+		Parse<MapResultTestParser1, "">,
+		ParserErrorResult<"Choice didn't match, none of the subparsers matched">
+	>
+>;
+type map_result_parse_check_2 = Expect<
+	Equal<Parse<MapResultTestParser1, "23_">, ParserSuccessResult<[["2", "3"], false], "_">>
+>;
+
+type MapResultTestParser2 = Parse<MapResult, [Parse<Just, "1">, ToLiteralMapperTest<true>]>;
+
+type map_result_parse_check_3 = Expect<
+	Equal<Parse<MapResultTestParser2, "1">, ParserSuccessResult<true, "">>
+>;
+type map_result_parse_check_4 = Expect<
+	Equal<Parse<MapResultTestParser2, "11">, ParserSuccessResult<true, "1">>
 >;
