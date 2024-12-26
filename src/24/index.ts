@@ -70,9 +70,10 @@ type Mapper = MapperImpl<unknown, unknown>;
 type SepBy0Kw = "sepby0";
 type SepBy0 = LazyParserMetadata<SepBy0Kw>;
 
-type Maybe = LazyParserMetadata<"maybe">;
+type MaybeKw = "maybe";
+type Maybe = LazyParserMetadata<MaybeKw>;
 
-type MaybeResult = LazyParserMetadata<"mayberesult">;
+type MaybeResult = { maybe: true; matched: 0 };
 
 // implementations
 
@@ -247,7 +248,15 @@ type LazyParser<T extends string, Argument> = T extends JustKw
 														argument: Argument;
 														message: IsValidTupleArg<Argument, StrictMap[SepBy0Kw]>;
 													}
-											: { todo: 0; data: T; arg: Argument };
+											: T extends MaybeKw
+												? IsValidManyArg<Argument> extends true
+													? LazyOperation<T, Argument>
+													: {
+															error: "invalid argument for Maybe";
+															argument: Argument;
+															message: IsValidManyArg<Argument>;
+														}
+												: { todo: 0; data: T; arg: Argument };
 
 type JustApplImpl<Data, Arg> = Arg extends string
 	? Arg extends `${infer FirstChar}${infer Rest}`
@@ -445,6 +454,14 @@ type SepBy0ApplImpl<Data, Arg> = Data extends [
 		: ParserErrorResult<"SepBy0 didn't match, invalid arguments, implementation error, arg is not a string">
 	: ParserErrorResult<"SepBy0 didn't match, invalid arguments, implementation error, data is not a tuple of parsers">;
 
+type MaybeApplImpl<Data, Arg> = Data extends Parser
+	? Arg extends string
+		? Parse<Data, Arg> extends ParserSuccessResult<infer Data1, infer Rest1>
+			? ParserSuccessResult<Data1, Rest1>
+			: ParserSuccessResult<MaybeResult, Arg>
+		: ParserErrorResult<"Maybe didn't match, Arguments didn't match, implementation error 2">
+	: ParserErrorResult<"Maybe didn't match, Arguments didn't match, implementation error 1">;
+
 type LazyParserAppl<Op, Data, Arg> = Op extends JustKw
 	? JustApplImpl<Data, Arg>
 	: Op extends NoneOfKw
@@ -469,12 +486,14 @@ type LazyParserAppl<Op, Data, Arg> = Op extends JustKw
 											? MapResultApplImpl<Data, Arg>
 											: Op extends SepBy0Kw
 												? SepBy0ApplImpl<Data, Arg>
-												: {
-														todo: 2;
-														op: Op;
-														data: Data;
-														arg: Arg;
-													};
+												: Op extends MaybeKw
+													? MaybeApplImpl<Data, Arg>
+													: {
+															todo: 2;
+															op: Op;
+															data: Data;
+															arg: Arg;
+														};
 
 type Parse<Operation, Argument> = Operation extends LazyParserMetadata<infer T extends string>
 	? LazyParser<T, Argument>
@@ -1338,4 +1357,60 @@ type sepby0_parse_check_3 = Expect<
 >;
 type sepby0_parse_check_4 = Expect<
 	Equal<Parse<SepBy0TestParser, "1,1">, ParserSuccessResult<["1", "1"], "">>
+>;
+
+// maybe tests
+
+type maybe_arg_check_0 = Expect<
+	Equal<
+		Parse<Maybe, 1>,
+		{
+			error: "invalid argument for Maybe";
+			argument: 1;
+			message: "argument is not an parser";
+		}
+	>
+>;
+type maybe_arg_check_1 = Expect<
+	Equal<
+		Parse<Maybe, "11">,
+		{
+			error: "invalid argument for Maybe";
+			argument: "11";
+			message: "argument is not an parser";
+		}
+	>
+>;
+type maybe_arg_check_2 = Expect<
+	Equal<
+		Parse<Maybe, [1]>,
+		{
+			error: "invalid argument for Maybe";
+			argument: [1];
+			message: "argument is not an parser";
+		}
+	>
+>;
+
+type maybe_arg_check_3 = Expect<
+	Equal<Parse<Maybe, Parse<Just, "1">>, LazyOperation<MaybeKw, LazyOperation<JustKw, "1">>>
+>;
+
+type maybe_is_parser = Expect<Equal<IsParser<Parse<Maybe, Parse<Just, "1">>>, true>>;
+
+type MaybeTestParser = Parse<Maybe, Parse<Just, "1">>;
+
+type maybe_parse_check_0 = Expect<
+	Equal<Parse<MaybeTestParser, "123">, ParserSuccessResult<"1", "23">>
+>;
+type maybe_parse_check_1 = Expect<
+	Equal<Parse<MaybeTestParser, "">, ParserSuccessResult<MaybeResult, "">>
+>;
+type maybe_parse_check_2 = Expect<
+	Equal<Parse<MaybeTestParser, "0">, ParserSuccessResult<MaybeResult, "0">>
+>;
+
+type maybe_parse_check_3 = Expect<Equal<Parse<MaybeTestParser, "1">, ParserSuccessResult<"1", "">>>;
+type maybe_parse_check_4 = Expect<
+	Equal<Parse<MaybeTestParser, "11">, ParserSuccessResult<"1", "1">>
 >;
