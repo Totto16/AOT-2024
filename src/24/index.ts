@@ -47,9 +47,11 @@ type Seq = LazyParserMetadata<SeqKw>;
 type PairKw = "pair";
 type Pair = LazyParserMetadata<PairKw>;
 
-type Many0 = LazyParserMetadata<"many0">;
+type Many0Kw = "many0";
+type Many0 = LazyParserMetadata<Many0Kw>;
 
-type Many1 = LazyParserMetadata<"many1">;
+type Many1Kw = "many1";
+type Many1 = LazyParserMetadata<Many1Kw>;
 
 type MapResult = LazyParserMetadata<"mapresult">;
 
@@ -92,6 +94,8 @@ type IsValidChoiceArg<T> = T extends unknown[]
 			: { message: "argument is not an parser"; data: FirstElem }
 		: "argument is an empty array"
 	: "argument is not an array";
+
+type IsValidManyArg<T> = T extends Parser ? true : "argument is not an parser";
 
 type LazyParser<T extends string, Argument> = T extends JustKw
 	? IsValidTokenArg<Argument> extends true
@@ -149,7 +153,23 @@ type LazyParser<T extends string, Argument> = T extends JustKw
 										argument: Argument;
 										message: IsValidChoiceArg<Argument>;
 									}
-							: { todo: 0; data: T; arg: Argument };
+							: T extends Many0Kw
+								? IsValidManyArg<Argument> extends true
+									? LazyOperation<T, Argument>
+									: {
+											error: "invalid argument for Many0";
+											argument: Argument;
+											message: IsValidManyArg<Argument>;
+										}
+								: T extends Many1Kw
+									? IsValidManyArg<Argument> extends true
+										? LazyOperation<T, Argument>
+										: {
+												error: "invalid argument for Many1";
+												argument: Argument;
+												message: IsValidManyArg<Argument>;
+											}
+									: { todo: 0; data: T; arg: Argument };
 
 type JustApplImpl<Data, Arg> = Arg extends string
 	? Arg extends `${infer FirstChar}${infer Rest}`
@@ -259,6 +279,27 @@ type ChoiceApplImpl<Data, Arg> = Data extends Array<Parser>
 			: ParserErrorResult<"Choice didn't match, unreachable case: reason, [] already checked">
 	: ParserErrorResult<"Choice didn't match, Arguments didn't match, implementation error">;
 
+type ManyGeneralApplImpl<Pars extends Parser, Arg extends string, Acc extends unknown[]> = Parse<
+	Pars,
+	Arg
+> extends ParserSuccessResult<infer Data, infer Rest>
+	? ManyGeneralApplImpl<Pars, Rest, [...Acc, Data]>
+	: ParserSuccessResult<Acc, Arg>;
+
+type Many0ApplImpl<Data, Arg> = Data extends Parser
+	? Arg extends string
+		? ManyGeneralApplImpl<Data, Arg, []>
+		: ParserErrorResult<"Choice didn't match, Arguments didn't match, implementation error 2">
+	: ParserErrorResult<"Choice didn't match, Arguments didn't match, implementation error 1">;
+
+type Many1ApplImpl<Data, Arg> = Data extends Parser
+	? Arg extends string
+		? Parse<Data, Arg> extends ParserSuccessResult<infer Data1, infer Rest1>
+			? ManyGeneralApplImpl<Data, Rest1, [Data1]>
+			: ParserErrorResult<"Many1 didn't match, matched 0 times">
+		: ParserErrorResult<"Choice didn't match, Arguments didn't match, implementation error 2">
+	: ParserErrorResult<"Choice didn't match, Arguments didn't match, implementation error 1">;
+
 type LazyParserAppl<Op, Data, Arg> = Op extends JustKw
 	? JustApplImpl<Data, Arg>
 	: Op extends NoneOfKw
@@ -275,12 +316,16 @@ type LazyParserAppl<Op, Data, Arg> = Op extends JustKw
 							? EOFApplImpl<Data, Arg>
 							: Op extends ChoiceKw
 								? ChoiceApplImpl<Data, Arg>
-								: {
-										todo: 2;
-										op: Op;
-										data: Data;
-										arg: Arg;
-									};
+								: Op extends Many0Kw
+									? Many0ApplImpl<Data, Arg>
+									: Op extends Many1Kw
+										? Many1ApplImpl<Data, Arg>
+										: {
+												todo: 2;
+												op: Op;
+												data: Data;
+												arg: Arg;
+											};
 
 type Parse<Operation, Argument> = Operation extends LazyParserMetadata<infer T extends string>
 	? LazyParser<T, Argument>
@@ -860,4 +905,116 @@ type choice_parse_check_3 = Expect<
 >;
 type choice_parse_check_4 = Expect<
 	Equal<Parse<ChoiceTestParser1, "11">, ParserSuccessResult<"1", "1">>
+>;
+
+// many0 tests
+
+type many0_arg_check_0 = Expect<
+	Equal<
+		Parse<Many0, 1>,
+		{
+			error: "invalid argument for Many0";
+			argument: 1;
+			message: "argument is not an parser";
+		}
+	>
+>;
+type many0_arg_check_1 = Expect<
+	Equal<
+		Parse<Many0, "11">,
+		{
+			error: "invalid argument for Many0";
+			argument: "11";
+			message: "argument is not an parser";
+		}
+	>
+>;
+type many0_arg_check_2 = Expect<
+	Equal<
+		Parse<Many0, [1]>,
+		{
+			error: "invalid argument for Many0";
+			argument: [1];
+			message: "argument is not an parser";
+		}
+	>
+>;
+
+type many0_arg_check_3 = Expect<
+	Equal<Parse<Many0, Parse<Just, "1">>, LazyOperation<Many0Kw, LazyOperation<JustKw, "1">>>
+>;
+
+type many0_is_parser = Expect<Equal<IsParser<Parse<Many0, Parse<Just, "1">>>, true>>;
+
+type Many0TestParser = Parse<Many0, Parse<Just, "1">>;
+
+type many0_parse_check_0 = Expect<
+	Equal<Parse<Many0TestParser, "123">, ParserSuccessResult<["1"], "23">>
+>;
+type many0_parse_check_1 = Expect<Equal<Parse<Many0TestParser, "">, ParserSuccessResult<[], "">>>;
+type many0_parse_check_2 = Expect<Equal<Parse<Many0TestParser, "0">, ParserSuccessResult<[], "0">>>;
+
+type many0_parse_check_3 = Expect<
+	Equal<Parse<Many0TestParser, "1">, ParserSuccessResult<["1"], "">>
+>;
+type many0_parse_check_4 = Expect<
+	Equal<Parse<Many0TestParser, "11">, ParserSuccessResult<["1", "1"], "">>
+>;
+
+// many1 tests
+
+type many1_arg_check_0 = Expect<
+	Equal<
+		Parse<Many1, 1>,
+		{
+			error: "invalid argument for Many1";
+			argument: 1;
+			message: "argument is not an parser";
+		}
+	>
+>;
+type many1_arg_check_1 = Expect<
+	Equal<
+		Parse<Many1, "11">,
+		{
+			error: "invalid argument for Many1";
+			argument: "11";
+			message: "argument is not an parser";
+		}
+	>
+>;
+type many1_arg_check_2 = Expect<
+	Equal<
+		Parse<Many1, [1]>,
+		{
+			error: "invalid argument for Many1";
+			argument: [1];
+			message: "argument is not an parser";
+		}
+	>
+>;
+
+type many1_arg_check_3 = Expect<
+	Equal<Parse<Many1, Parse<Just, "1">>, LazyOperation<Many1Kw, LazyOperation<JustKw, "1">>>
+>;
+
+type many1_is_parser = Expect<Equal<IsParser<Parse<Many1, Parse<Just, "1">>>, true>>;
+
+type Many1TestParser = Parse<Many1, Parse<Just, "1">>;
+
+type many1_parse_check_0 = Expect<
+	Equal<Parse<Many1TestParser, "123">, ParserSuccessResult<["1"], "23">>
+>;
+type many1_parse_check_1 = Expect<
+	Equal<Parse<Many1TestParser, "">, ParserErrorResult<"Many1 didn't match, matched 0 times">>
+>;
+type many1_parse_check_2 = Expect<
+	Equal<Parse<Many1TestParser, "0">, ParserErrorResult<"Many1 didn't match, matched 0 times">>
+>;
+
+type many1_parse_check_3 = Expect<
+	Equal<Parse<Many1TestParser, "1">, ParserSuccessResult<["1"], "">>
+>;
+type many1_parse_check_4 = Expect<
+	Equal<Parse<Many1TestParser, "11">, ParserSuccessResult<["1", "1"], "">>
 >;
