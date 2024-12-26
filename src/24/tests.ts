@@ -50,32 +50,32 @@ type t10 = Expect<Equal<t10_actual, t10_expected>>;
 // base parsers
 type Whitespace = " " | "\t" | "\n";
 
-type Whitespace0 = Parse<Many0, Parse<Just, Whitespace>>;
+export type Whitespace0 = Parse<Many0, Parse<Just, Whitespace>>;
 
 type Digit = "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9";
 
-type Digits0 = Parse<Many0, Parse<Just, Digit>>;
-type Digits1 = Parse<Many1, Parse<Just, Digit>>;
+export type Digits0 = Parse<Many0, Parse<Just, Digit>>;
+export type Digits1 = Parse<Many1, Parse<Just, Digit>>;
 
-type Between<L extends Parser, R extends Parser, P extends Parser> = Parse<
+export type Between<L extends Parser, R extends Parser, P extends Parser> = Parse<
   Left,
   [Parse<Right, [L, P]>, R]
 >;
 
-type Str<
+export type Str<
   T extends string,
   Acc extends Parser[] = [],
 > = T extends `${infer Head}${infer Rest}`
   ? Str<Rest, [...Acc, Parse<Just, Head>]>
   : Parse<MapResult, [Parse<Seq, Acc>, Join]>;
 
-type Padded<P extends Parser> = Parse<Left, [P, Whitespace0]>;
+export type Padded<P extends Parser> = Parse<Left, [P, Whitespace0]>;
 
-type Sym<T extends string> = Padded<Str<T>>;
+export type Sym<T extends string> = Padded<Str<T>>;
 
-type JSONParser = Between<Whitespace0, EOF, JSONValueParser>;
+export type JSONParser = Between<Whitespace0, EOF, JSONValueParser>;
 
-type JSONValueParser = () => Padded<
+export type JSONValueParser = () => Padded<
   Parse<
     Choice,
     [
@@ -90,10 +90,10 @@ type JSONValueParser = () => Padded<
 >;
 
 // `null`
-type JSONNullParser = Parse<MapResult, [Str<"null">, ToLiteral<null>]>;
+export type JSONNullParser = Parse<MapResult, [Str<"null">, ToLiteral<null>]>;
 
 // boolean
-type JSONBooleanParser = Parse<
+export type JSONBooleanParser = Parse<
   Choice,
   [
     Parse<MapResult, [Str<"true">, ToLiteral<true>]>,
@@ -102,7 +102,7 @@ type JSONBooleanParser = Parse<
 >;
 
 // string
-type JSONStringParser = Parse<
+export type JSONStringParser = Parse<
   MapResult,
   [
     Between<
@@ -142,7 +142,7 @@ type JSONStringParser = Parse<
 >;
 
 // number
-type JSONNumberParser = Parse<
+export type JSONNumberParser = Parse<
   MapResult,
   [
     Parse<
@@ -167,14 +167,14 @@ type JSONNumberParser = Parse<
 >;
 
 // array
-type JSONArrayParser = Between<
+export type JSONArrayParser = Between<
   Sym<"[">,
   Sym<"]">,
   Parse<SepBy0, [JSONValueParser, Sym<",">]>
 >;
 
 // object
-type JSONObjectParser = Between<
+export type JSONObjectParser = Between<
   Sym<"{">,
   Sym<"}">,
   Parse<
