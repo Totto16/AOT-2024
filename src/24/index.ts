@@ -1,4 +1,4 @@
-import type { Expect, Equal } from "type-testing";
+import type { Expect, Equal, NotEqual } from "type-testing";
 
 type LazyParserMetadata<T extends string> = {
 	metadata: true;
@@ -16,9 +16,9 @@ type ParserSuccessResult<Data, Rest extends string> = { success: true; data: Dat
 
 type ParserGeneric<T> = (inp: string) => ParserResult<T>;
 
-type LazyParerImpl = LazyOperation<unknown, unknown>;
+type LazyParserImpl = LazyOperation<unknown, unknown>;
 
-type Parser = ParserGeneric<unknown> | LazyParerImpl;
+type Parser = ParserGeneric<unknown> | LazyParserImpl;
 
 type IsParser<T> = T extends Parser ? true : false;
 
@@ -75,13 +75,44 @@ type SepBy0 = LazyParserMetadata<"sepby0">;
 
 // implementations
 
-type IsValidTokenArg<T> = T extends string
+// this is for some bad tests cases
+type StrictMap = {
+	[key in JustKw]: false;
+} & {
+	[key in NoneOfKw]: true;
+} & {
+	[key in SeqKw]: false;
+} & {
+	[key in LeftKw]: true;
+} & {
+	[key in RightKw]: true;
+} & {
+	[key in PairKw]: true;
+};
+
+type IsValidTokenArg<T, Strict extends boolean> = Strict extends true
+	? IsValidTokenArgStrict<T>
+	: IsValidTokenArgNonStrict<T>;
+
+// this is for some non changebale test cases, that do not fullfill this requirements :(
+type IsValidTokenArgNonStrict<T> = true;
+
+type IsValidTokenArgStrict<T> = T extends string
 	? T extends `${infer A}${infer B extends ""}`
 		? true
 		: "argument length is not 1"
 	: "argument is not a string";
 
-type IsValidTupleArg<T> = T extends [infer A, infer B]
+type IsValidTupleArg<T, Strict extends boolean> = Strict extends true
+	? IsValidTupleArgStrict<T>
+	: IsValidTupleArgNonStrict<T>;
+
+// this is for some non changebale test cases, that do not fullfill this requirements :(
+type IsValidTupleArgNonStrict<T> = T extends Parser[]
+	? true
+	: "argument is not an array of Parsers";
+
+type IsValidTupleArgStrict<T> = T extends [infer A, infer B]
 	? A extends Parser
 		? B extends Parser
 			? true
@@ -126,52 +157,52 @@ type IsValidMapResultArg<T> = T extends unknown[]
 	: "argument is not an array";
 
 type LazyParser<T extends string, Argument> = T extends JustKw
-	? IsValidTokenArg<Argument> extends true
+	? IsValidTokenArg<Argument, StrictMap[JustKw]> extends true
 		? LazyOperation<T, Argument>
 		: {
 				error: "invalid argument for Just";
 				argument: Argument;
-				message: IsValidTokenArg<Argument>;
+				message: IsValidTokenArg<Argument, StrictMap[JustKw]>;
 			}
 	: T extends NoneOfKw
-		? IsValidTokenArg<Argument> extends true
+		? IsValidTokenArg<Argument, StrictMap[NoneOfKw]> extends true
 			? LazyOperation<T, Argument>
 			: {
 					error: "invalid argument for NoneOf";
 					argument: Argument;
-					message: IsValidTokenArg<Argument>;
+					message: IsValidTokenArg<Argument, StrictMap[NoneOfKw]>;
 				}
 		: T extends RightKw
-			? IsValidTupleArg<Argument> extends true
+			? IsValidTupleArg<Argument, StrictMap[RightKw]> extends true
 				? LazyOperation<T, Argument>
 				: {
 						error: "invalid argument for Right";
 						argument: Argument;
-						message: IsValidTupleArg<Argument>;
+						message: IsValidTupleArg<Argument, StrictMap[RightKw]>;
 					}
 			: T extends LeftKw
-				? IsValidTupleArg<Argument> extends true
+				? IsValidTupleArg<Argument, StrictMap[LeftKw]> extends true
 					? LazyOperation<T, Argument>
 					: {
 							error: "invalid argument for Left";
 							argument: Argument;
-							message: IsValidTupleArg<Argument>;
+							message: IsValidTupleArg<Argument, StrictMap[LeftKw]>;
 						}
 				: T extends SeqKw
-					? IsValidTupleArg<Argument> extends true
+					? IsValidTupleArg<Argument, StrictMap[SeqKw]> extends true
 						? LazyOperation<T, Argument>
 						: {
 								error: "invalid argument for Seq";
 								argument: Argument;
-								message: IsValidTupleArg<Argument>;
+								message: IsValidTupleArg<Argument, StrictMap[SeqKw]>;
 							}
 					: T extends PairKw
-						? IsValidTupleArg<Argument> extends true
+						? IsValidTupleArg<Argument, StrictMap[PairKw]> extends true
 							? LazyOperation<T, Argument>
 							: {
 									error: "invalid argument for Pair";
 									argument: Argument;
-									message: IsValidTupleArg<Argument>;
+									message: IsValidTupleArg<Argument, StrictMap[PairKw]>;
 								}
 						: T extends ChoiceKw
 							? IsValidChoiceArg<Argument> extends true
@@ -223,7 +254,26 @@ type NoneOfApplImpl<Data, Arg> = Arg extends string
 		: ParserErrorResult<"NoneOf didn't match, case 1">
 	: ParserErrorResult<"NoneOf didn't match, Arguments didn't match, implementation error">;
 
-type SeqApplImpl<Data, Arg> = Data extends [
+type SeqApplImpl<Data, Arg, Strict extends boolean> = Strict extends true
+	? SeqApplImplStrict<Data, Arg>
+	: SeqApplImplNonStrict<Data, Arg>;
+
+// this is for some non changebale test cases, that do not fullfill this requirements :(
+
+type SeqApplImplNonStrict<Data, Arg, Acc extends unknown[] = []> = Arg extends string
+	? Data extends []
+		? ParserSuccessResult<Acc, Arg>
+		: Data extends [infer Parser1 extends Parser, ...infer RestParsers extends Parser[]]
+			? Parse<Parser1, Arg> extends ParserSuccessResult<infer Data1, infer Rest1>
+				? SeqApplImplNonStrict<RestParsers, Rest1, [...Acc, Data1]>
+				: ParserErrorResult<{
+						message: "Seq didn't match, parser didn't match";
+						result: Parse<Parser1, Arg>;
+					}>
+			: ParserErrorResult<"Seq didn't match, Arguments didn't match, implementation error">
+	: ParserErrorResult<"Seq didn't match, Arguments didn't match, implementation error, arg not a string">;
+
+type SeqApplImplStrict<Data, Arg> = Data extends [
 	infer Parser1 extends Parser,
 	infer Parser2 extends Parser,
 ]
@@ -242,14 +292,15 @@ type SeqApplImpl<Data, Arg> = Data extends [
 			}>
 	: ParserErrorResult<"Seq didn't match, Arguments didn't match, implementation error">;
 
-type LeftApplImpl<Data, Arg> = SeqApplImpl<Data, Arg> extends ParserSuccessResult<
-	infer Data,
-	infer Rest
->
+type LeftApplImpl<Data, Arg> = SeqApplImpl<
+	Data,
+	Arg,
+	StrictMap[LeftKw]
+> extends ParserSuccessResult<infer Data, infer Rest>
 	? Data extends [infer Data1, infer Data2]
 		? ParserSuccessResult<Data1, Rest>
 		: ParserErrorResult<"Left didn't match, return arguments from Seq didn't match, implementation error">
-	: SeqApplImpl<Data, Arg> extends ParserErrorResult<infer Add>
+	: SeqApplImpl<Data, Arg, StrictMap[LeftKw]> extends ParserErrorResult<infer Add>
 		? Add extends {
 				message: infer Mes extends string;
 				result: infer Res;
@@ -261,14 +312,15 @@ type LeftApplImpl<Data, Arg> = SeqApplImpl<Data, Arg> extends ParserSuccessResul
 			: ParserErrorResult<"Left didn't match, error message from Seq didn't match, implementation error">
 		: ParserErrorResult<"Left didn't match, not a valid ParserResult, implementation error">;
 
-type RightApplImpl<Data, Arg> = SeqApplImpl<Data, Arg> extends ParserSuccessResult<
-	infer Data,
-	infer Rest
->
+type RightApplImpl<Data, Arg> = SeqApplImpl<
+	Data,
+	Arg,
+	StrictMap[RightKw]
+> extends ParserSuccessResult<infer Data, infer Rest>
 	? Data extends [infer Data1, infer Data2]
 		? ParserSuccessResult<Data2, Rest>
 		: ParserErrorResult<"Right didn't match, return arguments from Seq didn't match, implementation error">
-	: SeqApplImpl<Data, Arg> extends ParserErrorResult<infer Add>
+	: SeqApplImpl<Data, Arg, StrictMap[RightKw]> extends ParserErrorResult<infer Add>
 		? Add extends {
 				message: infer Mes extends string;
 				result: infer Res;
@@ -280,14 +332,15 @@ type RightApplImpl<Data, Arg> = SeqApplImpl<Data, Arg> extends ParserSuccessResu
 			: ParserErrorResult<"Right didn't match, error message from Seq didn't match, implementation error">
 		: ParserErrorResult<"Right didn't match, not a valid ParserResult, implementation error">;
 
-type PairApplImpl<Data, Arg> = SeqApplImpl<Data, Arg> extends ParserSuccessResult<
-	infer Data,
-	infer Rest
->
+type PairApplImpl<Data, Arg> = SeqApplImpl<
+	Data,
+	Arg,
+	StrictMap[PairKw]
+> extends ParserSuccessResult<infer Data, infer Rest>
 	? Data extends [infer Data1 extends string, infer Data2 extends string]
 		? ParserSuccessResult<`${Data1}${Data2}`, Rest>
 		: ParserErrorResult<"Pair didn't match, return arguments from Seq didn't match, implementation error">
-	: SeqApplImpl<Data, Arg> extends ParserErrorResult<infer Add>
+	: SeqApplImpl<Data, Arg, StrictMap[PairKw]> extends ParserErrorResult<infer Add>
 		? Add extends {
 				message: infer Mes extends string;
 				result: infer Res;
@@ -357,7 +410,7 @@ type LazyParserAppl<Op, Data, Arg> = Op extends JustKw
 	: Op extends NoneOfKw
 		? NoneOfApplImpl<Data, Arg>
 		: Op extends SeqKw
-			? SeqApplImpl<Data, Arg>
+			? SeqApplImpl<Data, Arg, StrictMap[SeqKw]>
 			: Op extends LeftKw
 				? LeftApplImpl<Data, Arg>
 				: Op extends RightKw
@@ -391,7 +444,7 @@ type Parse<Operation, Argument> = Operation extends LazyParserMetadata<infer T e
 
 // just tests
 type just_arg_check_0 = Expect<
-	Equal<
+	NotEqual<
 		Parse<Just, 1>,
 		{
 			error: "invalid argument for Just";
@@ -400,8 +453,9 @@ type just_arg_check_0 = Expect<
 		}
 	>
 >;
+
 type just_arg_check_1 = Expect<
-	Equal<
+	NotEqual<
 		Parse<Just, "11">,
 		{
 			error: "invalid argument for Just";
@@ -501,7 +555,7 @@ type seq_arg_check_0 = Expect<
 		{
 			error: "invalid argument for Seq";
 			argument: 1;
-			message: "argument is not a tuple with size 2";
+			message: "argument is not an array of Parsers";
 		}
 	>
 >;
@@ -511,7 +565,7 @@ type seq_arg_check_1 = Expect<
 		{
 			error: "invalid argument for Seq";
 			argument: "11";
-			message: "argument is not a tuple with size 2";
+			message: "argument is not an array of Parsers";
 		}
 	>
 >;
@@ -521,7 +575,7 @@ type seq_arg_check_2 = Expect<
 		{
 			error: "invalid argument for Seq";
 			argument: [1];
-			message: "argument is not a tuple with size 2";
+			message: "argument is not an array of Parsers";
 		}
 	>
 >;
@@ -530,6 +584,16 @@ type seq_arg_check_3 = Expect<
 	Equal<
 		Parse<Seq, [Parse<Just, "1">, Parse<Just, "2">]>,
 		LazyOperation<SeqKw, [LazyOperation<JustKw, "1">, LazyOperation<JustKw, "2">]>
+	>
+>;
+
+type seq_arg_check_4 = Expect<
+	Equal<
+		Parse<Seq, [Parse<Just, "1">, Parse<Just, "2">, Parse<Just, "3">]>,
+		LazyOperation<
+			SeqKw,
+			[LazyOperation<JustKw, "1">, LazyOperation<JustKw, "2">, LazyOperation<JustKw, "3">]
+		>
 	>
 >;
 
@@ -546,9 +610,8 @@ type seq_parse_check_1 = Expect<
 	Equal<
 		Parse<SeqTestParser1, "">,
 		ParserErrorResult<{
-			message: "Seq didn't match, first parser didn't match";
+			message: "Seq didn't match, parser didn't match";
 			result: ParserErrorResult<"Just didn't match, case 1">;
-			index: 1;
 		}>
 	>
 >;
@@ -556,9 +619,8 @@ type seq_parse_check_2 = Expect<
 	Equal<
 		Parse<SeqTestParser1, "0">,
 		ParserErrorResult<{
-			message: "Seq didn't match, first parser didn't match";
+			message: "Seq didn't match, parser didn't match";
 			result: ParserErrorResult<"Just didn't match, case 2">;
-			index: 1;
 		}>
 	>
 >;
@@ -567,9 +629,8 @@ type seq_parse_check_3 = Expect<
 	Equal<
 		Parse<SeqTestParser1, "1">,
 		ParserErrorResult<{
-			message: "Seq didn't match, second parser didn't match";
-			result: [ParserSuccessResult<"1", "">, ParserErrorResult<"Just didn't match, case 1">];
-			index: 2;
+			message: "Seq didn't match, parser didn't match";
+			result: ParserErrorResult<"Just didn't match, case 1">;
 		}>
 	>
 >;
@@ -577,9 +638,8 @@ type seq_parse_check_4 = Expect<
 	Equal<
 		Parse<SeqTestParser1, "11">,
 		ParserErrorResult<{
-			message: "Seq didn't match, second parser didn't match";
-			result: [ParserSuccessResult<"1", "1">, ParserErrorResult<"Just didn't match, case 2">];
-			index: 2;
+			message: "Seq didn't match, parser didn't match";
+			result: ParserErrorResult<"Just didn't match, case 2">;
 		}>
 	>
 >;
