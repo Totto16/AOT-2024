@@ -566,6 +566,11 @@ type Parse<Operation, Argument> = Operation extends LazyParserMetadata<
 	? LazyParser<T, Argument>
 	: Operation extends LazyOperation<infer Op, infer Arg>
 	? LazyParserAppl<Op, Arg, Argument>
+	: Operation extends (() => infer _R extends LazyOperation<
+			infer Op1,
+			infer Arg1
+	  >)
+	? LazyParserAppl<Op1, Arg1, Argument>
 	: ParserErrorResult<{
 			message: "Not a valid parser"
 			op: Operation
