@@ -1,7 +1,7 @@
 import type { Expect, Equal } from 'type-testing';
 
 /** `Demand` corresponds to the type you supply/modify */
-type t0_actual = Demand1;    // =>
+type t0_actual = Demand;    // =>
 
 /** This line shows what the expected result of `Demand` should be */
 type t0_expected = number; // => 

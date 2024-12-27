@@ -192,4 +192,4 @@ type ParseJson<T extends string> = ParseJsonImpl<
 		: { code: 0; error: "Json has garbage at end"; rest: Rest }
 	: { code: 1; error: "Invalid Json" }
 
-type Parse22<T extends string> = ParseJson<T>
+type Parse<T extends string> = ParseJson<T>

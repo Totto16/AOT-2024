@@ -21,6 +21,6 @@ type ParseLine<T extends string> =
 		? [{ argument: Arg; type: "CallExpression" }]
 		: []
 
-type Parse19<T extends string> = T extends `${infer Line};${infer Rest}`
-	? [...ParseLine<RemoveNewlines<Line>>, ...Parse19<Rest>]
+type Parse<T extends string> = T extends `${infer Line};${infer Rest}`
+	? [...ParseLine<RemoveNewlines<Line>>, ...Parse<Rest>]
 	: ParseLine<RemoveNewlines<T>>

@@ -1,4 +1,4 @@
-const createRoute7 = <
+const createRoute = <
   const Route extends string[]
 >(
   author: string,

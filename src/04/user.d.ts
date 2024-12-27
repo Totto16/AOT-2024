@@ -1,4 +1,4 @@
-const survivalRatio4 = (input: number | string) => {
+const survivalRatio = (input: number | string) => {
 	const quarter = typeof input === 'string' ? input : `${input} Q1`;
 	const data = quarterlyData[quarter];
 	if (!data) {

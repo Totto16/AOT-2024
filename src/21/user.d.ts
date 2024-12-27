@@ -1,6 +1,6 @@
-type Whitespace21 = " " | "\n" | "\t" | "\r"
+type Whitespace = " " | "\n" | "\t" | "\r"
 
-type VariableKeyword21 = "let" | "const" | "var"
+type VariableKeyword = "let" | "const" | "var"
 
 interface LintResult {
 	declared: string[]
@@ -19,9 +19,9 @@ type SetWithout<A extends unknown[], B extends unknown[]> = A extends [
 type LintImpl<
 	S extends string,
 	Result extends LintResult = { declared: []; used: [] }
-> = S extends `${Whitespace21}${infer Rest}`
+> = S extends `${Whitespace}${infer Rest}`
 	? LintImpl<Rest, Result>
-	: S extends `${VariableKeyword21} ${infer ID} = "${string}";${infer Rest}`
+	: S extends `${VariableKeyword} ${infer ID} = "${string}";${infer Rest}`
 	? LintImpl<
 			Rest,
 			{ declared: [...Result["declared"], ID]; used: Result["used"] }

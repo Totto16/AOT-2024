@@ -1,10 +1,10 @@
 type Whitespace = " " | "\n" | "\t" | "\r";
 
-type VariableKeyword20 = "let" | "const" | "var";
+type VariableKeyword = "let" | "const" | "var";
 
 type AnalyzeScope<T> = T extends `${Whitespace}${infer Tail}`
 	? AnalyzeScope<Tail>
-	: T extends `${VariableKeyword20} ${infer Variable} = "${string}";${infer Tail}`
+	: T extends `${VariableKeyword} ${infer Variable} = "${string}";${infer Tail}`
 		? {
 				declared: [Variable, ...AnalyzeScope<Tail>["declared"]];
 				used: AnalyzeScope<Tail>["used"];
