@@ -4,7 +4,7 @@
   "description": "AOT-2024 solutions",
   "main": "build/index.js",
   "scripts": {
-    "build": "tsc"
+    "build": "bash ./build_all.sh"
   },
   "repository": {
     "type": "git",
