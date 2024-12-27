@@ -1034,3 +1034,25 @@ type maybe_parse_check_3 = Expect<
 type maybe_parse_check_4 = Expect<
 	Equal<Parse<MaybeTestParser, "11">, ParserSuccessResult<"1", "1">>
 >
+
+// recursive parsers tests
+
+type RecursiveParsersTest = () => Parse<
+	Choice,
+	[Parse<Just, ",">, Parse<SepBy0, [Parse<Just, "2">, RecursiveParsersTest]>]
+>
+
+type recursive_is_parser = Expect<Equal<IsParser<RecursiveParsersTest>, true>>
+
+type recursive_parse_check_0 = Expect<
+	Equal<Parse<RecursiveParsersTest, ",123">, ParserSuccessResult<",", "123">>
+>
+type recursive_parse_check_1 = Expect<
+	Equal<Parse<RecursiveParsersTest, "">, ParserSuccessResult<[], "">>
+>
+type recursive_parse_check_2 = Expect<
+	Equal<
+		Parse<RecursiveParsersTest, "2,2,20">,
+		ParserSuccessResult<["2", "2", "2"], "0">
+	>
+>
