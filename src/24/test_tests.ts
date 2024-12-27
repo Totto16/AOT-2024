@@ -91,37 +91,84 @@ type n_check_2 = Expect<
 type s_check_0 = Expect<
 	Equal<
 		Parse<JSONStringParser, '"a string 1"__'>,
-		{ data: "a string 1"; rest: "__" }
+		ParserSuccessResult<"a string 1", "__">
 	>
 >
 type s_check_1 = Expect<
 	Equal<
 		Parse<JSONStringParser, '"not terminated'>,
-		{ code: 7; error: "Not a valid string: Not terminated" }
+		ParserErrorResult<{
+			message: "Left didn't match, second parser didn't match"
+			result: [
+				ParserSuccessResult<
+					[
+						"n",
+						"o",
+						"t",
+						" ",
+						"t",
+						"e",
+						"r",
+						"m",
+						"i",
+						"n",
+						"a",
+						"t",
+						"e",
+						"d"
+					],
+					""
+				>,
+				ParserErrorResult<"Just didn't match, case 1">
+			]
+			index: 2
+		}>
 	>
 >
 type s_check_2 = Expect<
 	Equal<
 		Parse<JSONStringParser, "garbage">,
-		{ code: 6; error: "Not a valid string" }
+		ParserErrorResult<{
+			message: "Left didn't match, first parser didn't match"
+			result: ParserErrorResult<{
+				message: "Right didn't match, first parser didn't match"
+				result: ParserErrorResult<"Just didn't match, case 2">
+				index: 1
+			}>
+			index: 1
+		}>
 	>
 >
 type s_check_3 = Expect<
 	Equal<
 		Parse<JSONStringParser, '"\\'>,
-		{ code: 8; error: "Not a valid string: escape sequence to short" }
+		ParserErrorResult<{
+			message: "Left didn't match, second parser didn't match"
+			result: [
+				ParserSuccessResult<[], "\\">,
+				ParserErrorResult<"Just didn't match, case 2">
+			]
+			index: 2
+		}>
 	>
 >
 type s_check_4 = Expect<
 	Equal<
 		Parse<JSONStringParser, '"\\p'>,
-		{ code: 9; error: "Not a valid string: escape sequence invalid" }
+		ParserErrorResult<{
+			message: "Left didn't match, second parser didn't match"
+			result: [
+				ParserSuccessResult<[], "\\p">,
+				ParserErrorResult<"Just didn't match, case 2">
+			]
+			index: 2
+		}>
 	>
 >
 type s_check_5 = Expect<
 	Equal<
 		Parse<JSONStringParser, '"\\n\\r\\t\\b\\f\\\\\\""__'>,
-		{ data: '\n\r\t\b\f\\"'; rest: "__" }
+		ParserSuccessResult<'\n\r\t\b\f\\"', "__">
 	>
 >
 
