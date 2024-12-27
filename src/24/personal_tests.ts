@@ -187,6 +187,7 @@ type seq_arg_check_4 = Expect<
 		>
 	>
 >
+type seq_arg_check_5 = Expect<Equal<Parse<Seq, []>, LazyOperation<SeqKw, []>>>
 
 type seq_is_parser = Expect<
 	Equal<IsParser<Parse<Seq, [Parse<Just, "1">, Parse<Just, "2">]>>, true>
@@ -203,6 +204,7 @@ type seq_parse_check_1 = Expect<
 		ParserErrorResult<{
 			message: "Seq didn't match, parser didn't match"
 			result: ParserErrorResult<"Just didn't match, case 1">
+			acc: []
 		}>
 	>
 >
@@ -212,16 +214,17 @@ type seq_parse_check_2 = Expect<
 		ParserErrorResult<{
 			message: "Seq didn't match, parser didn't match"
 			result: ParserErrorResult<"Just didn't match, case 2">
+			acc: []
 		}>
 	>
 >
-
 type seq_parse_check_3 = Expect<
 	Equal<
 		Parse<SeqTestParser1, "1">,
 		ParserErrorResult<{
 			message: "Seq didn't match, parser didn't match"
 			result: ParserErrorResult<"Just didn't match, case 1">
+			acc: ["1"]
 		}>
 	>
 >
@@ -231,6 +234,7 @@ type seq_parse_check_4 = Expect<
 		ParserErrorResult<{
 			message: "Seq didn't match, parser didn't match"
 			result: ParserErrorResult<"Just didn't match, case 2">
+			acc: ["1"]
 		}>
 	>
 >
@@ -485,7 +489,7 @@ type pair_is_parser = Expect<
 type PairTestParser1 = Parse<Pair, [Parse<Just, "1">, Parse<Just, "2">]>
 
 type pair_parse_check_0 = Expect<
-	Equal<Parse<PairTestParser1, "123">, ParserSuccessResult<"12", "3">>
+	Equal<Parse<PairTestParser1, "123">, ParserSuccessResult<["1", "2"], "3">>
 >
 type pair_parse_check_1 = Expect<
 	Equal<

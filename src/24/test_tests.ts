@@ -53,6 +53,7 @@ type nu_check_1 = Expect<
 		ParserErrorResult<{
 			message: "Seq didn't match, parser didn't match"
 			result: ParserErrorResult<"Just didn't match, case 2">
+			acc: []
 		}>
 	>
 >
@@ -70,18 +71,20 @@ type b_check_2 = Expect<
 	>
 >
 
-//TODO
-type z = Parse<JSONNumberParser, "4__">
 type n_check_0 = Expect<
 	Equal<Parse<JSONNumberParser, "4__">, ParserSuccessResult<4, "__">>
 >
 type n_check_1 = Expect<
-	Equal<Parse<JSONNumberParser, "1214__">, { data: 1214; rest: "__" }>
+	Equal<Parse<JSONNumberParser, "1214__">, ParserSuccessResult<1214, "__">>
 >
 type n_check_2 = Expect<
 	Equal<
 		Parse<JSONNumberParser, "garbage">,
-		{ code: 5; error: "Not a valid number" }
+		ParserErrorResult<{
+			message: "Seq didn't match, parser didn't match"
+			result: ParserErrorResult<"Choice didn't match, none of the subparsers matched">
+			acc: [MaybeResult]
+		}>
 	>
 >
 

@@ -39,15 +39,19 @@ type Just = LazyParserMetadata<JustKw>
 type NoneOfKw = "noneof"
 type NoneOf = LazyParserMetadata<NoneOfKw>
 
+// left expects two parsers as argument
 type LeftKw = "left"
 type Left = LazyParserMetadata<LeftKw>
 
+// right expects two parsers as argument
 type RightKw = "right"
 type Right = LazyParserMetadata<RightKw>
 
+// seq expects multiple parsers as argument, it is similar to pair, which just accepts exactly 2
 type SeqKw = "seq"
 type Seq = LazyParserMetadata<SeqKw>
 
+// pair expects two parsers as argument
 type PairKw = "pair"
 type Pair = LazyParserMetadata<PairKw>
 
@@ -258,7 +262,11 @@ type LazyParser<T extends string, Argument> = T extends JustKw
 				argument: Argument
 				message: IsValidManyArg<Argument>
 		  }
-	: { todo: 0; data: T; arg: Argument }
+	: {
+			error: "Not a valid lazy parser"
+			op: T
+			argument: Argument
+	  }
 
 type JustApplImpl<Data, Arg> = Arg extends string
 	? Arg extends `${infer FirstChar}${infer Rest}`
@@ -301,6 +309,7 @@ type SeqApplImplNonStrict<
 			: ParserErrorResult<{
 					message: "Seq didn't match, parser didn't match"
 					result: Parse<Parser1, Arg>
+					acc: Acc
 			  }>
 		: ParserErrorResult<"Seq didn't match, Arguments didn't match, implementation error">
 	: ParserErrorResult<"Seq didn't match, Arguments didn't match, implementation error, arg not a string">
@@ -384,9 +393,12 @@ type PairApplImpl<Data, Arg> = SeqApplImpl<
 	Arg,
 	StrictMap[PairKw]
 > extends ParserSuccessResult<infer Data, infer Rest>
-	? Data extends [infer Data1 extends string, infer Data2 extends string]
-		? ParserSuccessResult<`${Data1}${Data2}`, Rest>
-		: ParserErrorResult<"Pair didn't match, return arguments from Seq didn't match, implementation error">
+	? Data extends [infer Data1, infer Data2]
+		? ParserSuccessResult<[Data1, Data2], Rest>
+		: ParserErrorResult<{
+				message: "Pair didn't match, return arguments from Seq didn't match, implementation error"
+				returned: Data
+		  }>
 	: SeqApplImpl<Data, Arg, StrictMap[PairKw]> extends ParserErrorResult<
 			infer Add
 	  >
@@ -543,9 +555,8 @@ type LazyParserAppl<Op, Data, Arg> = Op extends JustKw
 	: Op extends MaybeKw
 	? MaybeApplImpl<Data, Arg>
 	: {
-			todo: 2
-			op: Op
-			data: Data
+			message: "Not a valid lazy parser Keyword"
+			op: [Op, Data]
 			arg: Arg
 	  }
 
@@ -555,4 +566,8 @@ type Parse<Operation, Argument> = Operation extends LazyParserMetadata<
 	? LazyParser<T, Argument>
 	: Operation extends LazyOperation<infer Op, infer Arg>
 	? LazyParserAppl<Op, Arg, Argument>
-	: { todo: 1; data: Operation; arg: Argument }
+	: ParserErrorResult<{
+			message: "Not a valid parser"
+			op: Operation
+			arg: Argument
+	  }>
