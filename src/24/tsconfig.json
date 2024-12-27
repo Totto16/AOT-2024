@@ -1,0 +1,18 @@
+{
+    "extends": "../../tsconfig.json",
+    "compilerOptions": {
+        "verbatimModuleSyntax": true,
+        "noEmit": true,
+        "paths": {
+            "*": [
+                "./*"
+            ]
+        }
+    },
+    "include": [
+        "user.d.ts",
+        "tests.ts",
+        "test_tests.ts",
+        "personal_tests.ts"
+    ]
+}
